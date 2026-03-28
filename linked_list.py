@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 class Node:
-    val: Optional[int]
+    val: int
     prev: Optional[Node]
     next: Optional[Node]
 
@@ -42,8 +42,6 @@ class DoublyLinkedList:
         self.tail = node
         return node
     
-    def get_length(self) -> int:
-        return self.length
 
     def __iter__(self):
         self.curr = self.head
@@ -51,4 +49,8 @@ class DoublyLinkedList:
     
 
     def __next__(self):
-        pass
+        if self.curr is None:
+            raise StopIteration
+        result = self.curr
+        self.curr = self.curr.next
+        return result
