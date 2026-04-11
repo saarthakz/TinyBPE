@@ -21,13 +21,15 @@ def main():
         split=datasets.Split.TRAIN,
     )
 
+    # Filter out blank lines (empty/whitespace-only rows); actual text content and its spaces are preserved.
     chunks = [row["text"] for row in train_ds if row["text"].strip()]
     print(f"Total chunks: {len(chunks)}")
     print(f"Total characters: {sum(len(c) for c in chunks):,}")
 
-    # Train
     tok = Tokenizer()
-    print(f"\nTraining with vocab_size={args.vocab_size}...")
+    num_merges = args.vocab_size - 256
+
+    print(f"\nTraining with vocab_size={args.vocab_size} ({num_merges} merges)...")
     start = time.time()
     tok.train(chunks, vocab_size=args.vocab_size)
     elapsed = time.time() - start
