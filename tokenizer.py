@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from typing import List, Tuple, Dict, Set
 
 from avl_tree import AVLTree
@@ -31,6 +33,36 @@ class Tokenizer:
         for byte_pair, token_val in self.byte_pair_map.items():
             first, second = byte_pair
             self.vocab[token_val] = self.vocab[first] + self.vocab[second]
+
+    def save(self, path: str):
+        """Persist the learned tokenizer state as JSON."""
+        payload = {
+            "byte_pair_map": [
+                {"pair": [first, second], "token": token}
+                for (first, second), token in self.byte_pair_map.items()
+            ],
+            "vocab": {str(token): byte_seq for token, byte_seq in self.vocab.items()},
+        }
+
+        output_path = Path(path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+
+    @classmethod
+    def load(cls, path: str) -> "Tokenizer":
+        """Load a tokenizer previously saved with save()."""
+        with Path(path).open("r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        tokenizer = cls()
+        tokenizer.byte_pair_map = {
+            tuple(item["pair"]): item["token"] for item in payload["byte_pair_map"]
+        }
+        tokenizer.vocab = {
+            int(token): byte_seq for token, byte_seq in payload["vocab"].items()
+        }
+        return tokenizer
 
     # ── Shared helpers ──
 
@@ -288,7 +320,7 @@ class Tokenizer:
 
     # ── Train ──
 
-    def train(self, texts: List[str], vocab_size: int):
+    def train(self, texts: List[str], vocab_size: int, show_progress: bool = False):
         """Train the tokenizer on a list of text chunks using BPE.
 
         Concatenates all chunks into a single byte sequence, builds the DLL
@@ -299,6 +331,14 @@ class Tokenizer:
         compared to O(M * N) for the naive approach (M = number of merges).
         """
         assert vocab_size >= 256, "vocab_size must be at least 256 (the number of raw byte tokens)"
+
+        progress_bar = None
+        if show_progress:
+            try:
+                from tqdm import tqdm
+            except ImportError as exc:
+                raise ImportError("show_progress=True requires tqdm to be installed") from exc
+
         num_merges = vocab_size - 256
 
         tokens: List[int] = []
@@ -316,6 +356,9 @@ class Tokenizer:
 
         self.byte_pair_map = {}
 
+        if show_progress:
+            progress_bar = tqdm(total=num_merges, desc="Training merges", unit="merge")
+
         for idx in range(num_merges):
             if not ordered_pairs:
                 break
@@ -327,6 +370,11 @@ class Tokenizer:
 
             # Merge all occurrences — updates DLL, cache map, and AVL tree in place
             self._merge_pair_tracked(dll, cache_map, pair, new_token, ordered_pairs)
+            if progress_bar is not None:
+                progress_bar.update(1)
+
+        if progress_bar is not None:
+            progress_bar.close()
 
         self._build_vocab()
 
